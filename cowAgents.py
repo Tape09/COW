@@ -2,20 +2,36 @@
 import socket
 import select
 import numpy as np;
+import random;
 from lxml import etree
-
-
+import time
+import sys;
 
 shared = None;
 
 def make_decision(agent_index):
 	global shared;
 	
+	print (shared);
+	
+	x, y = shared.agents[agent_index];
+	moves = shared.valid_moves(agent_index);
+	
+	my_move = random.choice(moves);
+	
+	return my_move;
+	
+	
 	
 def main():
 	n_agents = 20;
-	password = "1";
-	user_prefix = "a"
+	
+	if(len(sys.argv)<3):
+		print("USAGE: cowAgents.py user_prefix password")
+		sys.exit()
+	
+	password = sys.argv[2];
+	user_prefix = sys.argv[1];
 
 	sockets = [];
 	usernames = [];
@@ -30,19 +46,35 @@ def main():
 		
 	while True:
 		readable, writable, exceptional = select.select(sockets, sockets, []);
+		time.sleep(0.01);
 		for s in readable:
-			data = s.recv(2**14);
+			data = s.recv(2**15);
 			if(data):				
-				# print();
+				# print(data);
 				agent_index = sockets.index(s);
-				print("RECEIVED MESSAGE FOR AGENT ", agent_index);
-				handle_raw_message(data,agent_index);
+				print("RECEIVED MESSAGE FOR AGENT", agent_index);
+				response = handle_raw_message(data,agent_index);
+				if(response):
+					s.send(response);
+					print("RESPONSE SENT")
 				
 		
+
+def create_action_message(type,id):
+	root = etree.Element("message", type="action")
+	action = etree.Element("action", type=type, id=id)
+	root.append(action);
+	prefix = '<?xml version="1.0" encoding="UTF-8"?>'
+	str = etree.tostring(root).decode("UTF-8");
+	str = prefix+str;
+	str = str.encode("UTF-8")
+	str = str + b'\0'
+	return str;		
+	
 		
 def create_auth_message(user,pw):
 	root = etree.Element("message", type="auth-request")
-	auth = etree.Element("authentication", password="1", username="a1")
+	auth = etree.Element("authentication", password=pw, username=user)
 	root.append(auth);
 	prefix = '<?xml version="1.0" encoding="UTF-8"?>'
 	str = etree.tostring(root).decode("UTF-8");
@@ -55,9 +87,14 @@ def create_auth_message(user,pw):
 def handle_raw_message(data,agent_index):
 	root = etree.fromstring(data);
 	
+	response = None;
 	# determine message type
 	if(root.attrib["type"] == "request-action"):
-		handle_ra(root, agent_index);
+		id = handle_ra(root, agent_index);
+		print("HANDLING REQUEST",id);
+		move = make_decision(agent_index);
+		string_move = shared.move_to_string[move];
+		response = create_action_message(string_move,id);
 	elif(root.attrib["type"] == "sim-start"):
 		handle_simstart(root);
 	elif(root.attrib["type"] == "auth-response"):
@@ -67,6 +104,7 @@ def handle_raw_message(data,agent_index):
 		print(data)
 		print("ERROR: bad message")
 		
+	return response;
 	
 		
 		
@@ -92,12 +130,14 @@ def handle_ra(root,agent_index): # HANDLE DISTANCE TO CORRAL CALCULATIONS HERE?
 	x_agent = int(perception.attrib["posx"]);
 	y_agent = int(perception.attrib["posy"]);
 	
+	id = perception.attrib["id"];
+	
 	shared.agents[agent_index] = (x_agent, y_agent);
 	shared.cows_in_corral = int(perception.attrib["cowsInCorral"]);
 	cells = perception.getchildren();
 	
 	for c in cells: # NEED TO CONSIDER IMERFECT VISION !!!
-		features = [0]*10;
+		features = [0]*len(shared.types);
 		features[0] = 1; # mark as explored
 		
 		x = int(c.attrib["x"]) + x_agent;
@@ -128,7 +168,7 @@ def handle_ra(root,agent_index): # HANDLE DISTANCE TO CORRAL CALCULATIONS HERE?
 				features[shared.types["button"]] = 1;
 			
 		shared.setmap(x,y,features);
-		
+	return id;
 		
 class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 	# fullmap 3rd dimension code:
@@ -145,7 +185,7 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 	def __init__(self, width, height, n_agents):
 		self.width = width;
 		self.height = height;
-		self.fullmap = np.zeros((width,height,10));
+		
 		self.cows_in_corral = 0;
 		self.agents = [(0,0)] * n_agents;
 		self.types = dict();
@@ -160,33 +200,84 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 		self.types["my_corral"] = 8;
 		self.types["enemy_corral"] = 9;
 		
+		self.move_to_string = dict();
+		self.move_to_string[(0,0)] = "skip";
+		self.move_to_string[(0,1)] = "south";
+		self.move_to_string[(0,-1)] = "north";
+		self.move_to_string[(1,0)] = "east";
+		self.move_to_string[(-1,0)] = "west";
+		self.move_to_string[(1,1)] = "southeast";
+		self.move_to_string[(-1,-1)] = "northwest";
+		self.move_to_string[(-1,1)] = "southwest";
+		self.move_to_string[(1,-1)] = "northeast";
+		
+		self.block = np.array([0,1,1,1,1,1,0,1,0,0]);
+		
+		self.fullmap = np.zeros((width,height,len(self.types)));
+		
+		self.corral_x0 = None;
+		self.corral_x1 = None;
+		self.corral_y0 = None;
+		self.corral_y1 = None;
+		
 		# set borders to explored + tree
 		for w in range(self.width):
-			self.modmap(w,0,"explored",1);
-			self.modmap(w,self.height-1,"explored",1);
-			self.modmap(w,0,"tree",1);
-			self.modmap(w,self.height-1,"tree",1);
+			self.modmap((w,0),"explored",1);
+			self.modmap((w,self.height-1),"explored",1);
+			self.modmap((w,0),"tree",1);
+			self.modmap((w,self.height-1),"tree",1);
 			
 		for h in range(self.height):
-			self.modmap(0,h,"explored",1);
-			self.modmap(self.width-1,h,"explored",1);
-			self.modmap(w,h,"tree",1);
-			self.modmap(self.width-1,h,"tree",1);
+			self.modmap((0,h),"explored",1);
+			self.modmap((self.width-1,h),"explored",1);
+			self.modmap((0,h),"tree",1);
+			self.modmap((self.width-1,h),"tree",1);
 	
 	def setmap(self,x,y,features):
 		self.fullmap[x,y] = features;
 	
 	def modmap(self,pos,type,val):
-		self.fullmap[pos.x,pos.y,self.types[type]] = val;
+		self.fullmap[pos[0],pos[1],self.types[type]] = val;
 		
-	def modmap(self,x,y,type,val):	
-		self.fullmap[x,y,self.types[type]] = val;
+	def feature_at(self,pos,feature):
+		return (self.fullmap[pos[0],pos[1],self.types[feature]]);
+		
+	def at(self, pos):
+		return self.fullmap[pos[0],pos[1]];
+		
+	def free_at(self,pos):
+		return not np.dot(self.at(pos),self.block);
+		
+		
+	def valid_moves(self, idx):
+		moves = [];
+		moves.append((0,0));
+		
+		pos = self.agents[idx];
+		
+		for dx in range(-1,2):
+			for dy in range(-1,2):
+				newpos = (pos[0] + dx, pos[1] + dy);
+				if(newpos[0] < 0 or newpos[0] >= self.width ):
+					continue;
+				if(newpos[1] < 0 or newpos[1] >= self.height ):
+					continue;
+					
+				if(self.free_at(newpos)):
+					moves.append((dx,dy));
+		
+		return moves;
+					
 		
 	def set_my_corral(self,x0,x1,y0,y1):
+		self.corral_x0 = x0;
+		self.corral_x1 = x1;
+		self.corral_y0 = y0;
+		self.corral_y1 = y1;
 		for x in range(x0,x1+1):
 			for y in range(y0,y1+1):
-				self.modmap(x,y,"explored",1);
-				self.modmap(x,y,"my_corral",1);
+				self.modmap((x,y),"explored",1);
+				self.modmap((x,y),"my_corral",1);
 
 				
 	def __str__(self):
