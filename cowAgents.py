@@ -21,6 +21,11 @@ def make_decision(agent_index):
 	
 	return my_move;
 	
+def end_game():
+	global shared;
+	print("GAME OVER!")
+	print("RESULT:", shared.final_result);
+	print("SCORE:", shared.final_score);
 	
 	
 def main():
@@ -55,8 +60,12 @@ def main():
 				print("RECEIVED MESSAGE FOR AGENT", agent_index);
 				response = handle_raw_message(data,agent_index);
 				if(response):
-					s.send(response);
-					print("RESPONSE SENT")
+					if(response == "end"):
+						end_game();
+						return;
+					else:
+						s.send(response);
+						print("RESPONSE SENT")
 				
 		
 
@@ -99,6 +108,9 @@ def handle_raw_message(data,agent_index):
 		handle_simstart(root);
 	elif(root.attrib["type"] == "auth-response"):
 		print("Authenticated!")
+	elif(root.attrib["type"] == "sim-end"):
+		handle_simend(root);
+		response = "end";
 	else:
 		#nothing?
 		print(data)
@@ -106,7 +118,12 @@ def handle_raw_message(data,agent_index):
 		
 	return response;
 	
-		
+def handle_simend(root):
+	global shared;
+	sim = root.getchildren()[0];
+	shared.final_score = double(sim.attrib["averageScore"]);
+	shared.final_result = sim.attrib["result"];
+	
 		
 def handle_simstart(root):
 	global shared;
@@ -220,6 +237,9 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 		self.corral_y0 = None;
 		self.corral_y1 = None;
 		
+		self.final_score = None;
+		self.final_result = None;
+		
 		# set borders to explored + tree
 		for w in range(self.width):
 			self.modmap((w,0),"explored",1);
@@ -298,7 +318,10 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 					out += "E";
 				elif(self.fullmap[w,h,self.types["button"]] == 1):
 					# print("O",end="");
-					out += "O";
+					out += "B";
+				elif(self.fullmap[w,h,self.types["cow"]] == 1):
+					# print("O",end="");
+					out += "ö";
 				elif(self.fullmap[w,h,self.types["closed_fence"]] == 1):
 					# print("=",end="");
 					out += "=";
