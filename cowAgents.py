@@ -191,6 +191,7 @@ def handle_ra(root,agent_index): # HANDLE DISTANCE TO CORRAL CALCULATIONS HERE?
 				features[shared.types["button"]] = 1;
 			
 		shared.setmap(x,y,features);
+		shared.update_dists();
 	return id;
 		
 class SharedMemory:	# NEED TO ADD DIST TO CORRAL
