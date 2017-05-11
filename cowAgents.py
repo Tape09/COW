@@ -13,7 +13,8 @@ shared = None;
 def make_decision(agent_index):
 	global shared;
 	
-	print (shared);
+	# print (shared);
+	print (shared.fullmap[1:20,1:20,10]);
 	
 	x, y = shared.agents[agent_index];
 	moves = shared.valid_moves(agent_index);
@@ -122,7 +123,7 @@ def handle_raw_message(data,agent_index):
 def handle_simend(root):
 	global shared;
 	sim = root.getchildren()[0];
-	shared.final_score = double(sim.attrib["averageScore"]);
+	shared.final_score = float(sim.attrib["averageScore"]);
 	shared.final_result = sim.attrib["result"];
 	
 		
@@ -240,6 +241,7 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 		self.block = np.array([0,1,1,1,1,1,0,1,0,0,0]);
 		
 		self.fullmap = np.zeros((width,height,len(self.types)));
+		self.fullmap[:,:,self.types["corral_dist"]] -= 1;
 		
 		self.corral_x0 = None;
 		self.corral_x1 = None;
@@ -307,6 +309,7 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 			for y in range(y0,y1+1):
 				self.modmap((x,y),"explored",1);
 				self.modmap((x,y),"my_corral",1);
+				self.modmap((x,y),"corral_dist",0);
 
 				
 	def __str__(self):
@@ -359,12 +362,13 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 		explored.add(start_pos);		
 		explore_q.put(start_pos);
 		
+
 		while not explore_q.empty():
 			base_pos = explore_q.get();
 			# print(base_pos);
 			# print(shared.at(base_pos));
 			base_dist = shared.feature_at(base_pos,"corral_dist");
-			
+			dist = base_dist + 1;			
 			# get neighbors
 			for dx in range(-1,2):
 				x = base_pos[0] + dx;
@@ -373,33 +377,37 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 					
 				for dy in range(-1,2):					
 					y = base_pos[1] + dy;
-					if(y < 0 or y >= shared.width): #if outside map
+					if(y < 0 or y >= shared.height): #if outside map
 						continue;
 					
 					pos = (x,y);
+					if(pos in explored): #if already explored
+						continue;
+					
 					explored.add(pos);
 					
 					if(shared.feature_at(pos,"explored") == 0):
-						continue;
-					
-					if(pos in explored): #if already explored
-						continue;
+						shared.modmap(pos, "corral_dist", -1);
+						continue;					
 						
 					if(shared.feature_at(pos,"tree") >= 1): #if tree = no dist
+						shared.modmap(pos, "corral_dist", -1);
 						continue;
 						
 					if(shared.feature_at(pos,"button") >= 1): #if button = no dist
+						shared.modmap(pos, "corral_dist", -1);
 						continue;
-					
-					
-					
-					dist = base_dist + 1;
-					old_dist = shared.feature_at(base_pos,"corral_dist");
-					
+
+					old_dist = shared.feature_at(pos,"corral_dist");					
 					
 					explore_q.put(pos);
-					shared.modmap(pos, "corral_dist", min(dist, old_dist));
-			
+					
+					if(old_dist < 0):
+						shared.modmap(pos, "corral_dist", dist);
+					else:						
+						shared.modmap(pos, "corral_dist", min(dist, old_dist));	
+					
+					
 
 		
 if __name__ == "__main__":
