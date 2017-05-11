@@ -6,6 +6,7 @@ import random;
 from lxml import etree
 import time
 import sys;
+from queue import Queue;
 
 shared = None;
 
@@ -138,9 +139,8 @@ def handle_simstart(root):
 	shared = SharedMemory(width,height,20);
 	shared.set_my_corral(x0,x1,y0,y1);
 	print("SIMULATION STARTED")
-	print(shared)
+	print(shared)	
 	
-		
 def handle_ra(root,agent_index): # HANDLE DISTANCE TO CORRAL CALCULATIONS HERE?
 	global shared;
 	perception = root.getchildren()[0];
@@ -156,6 +156,7 @@ def handle_ra(root,agent_index): # HANDLE DISTANCE TO CORRAL CALCULATIONS HERE?
 	for c in cells: # NEED TO CONSIDER IMERFECT VISION !!!
 		features = [0]*len(shared.types);
 		features[0] = 1; # mark as explored
+		features[10] = -1; # mark as unreachable
 		
 		x = int(c.attrib["x"]) + x_agent;
 		y = int(c.attrib["y"]) + y_agent;
@@ -183,6 +184,7 @@ def handle_ra(root,agent_index): # HANDLE DISTANCE TO CORRAL CALCULATIONS HERE?
 			elif(stype == "corral"):
 				if(s.attrib["type"] == "ally"):
 					features[shared.types["my_corral"]] = 1;
+					features[shared.types["corral_dist"]] = 0;
 				else:
 					features[shared.types["enemy_corral"]] = 1;
 			elif(stype == "switch"):
@@ -221,6 +223,7 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 		self.types["closed_fence"] = 7;
 		self.types["my_corral"] = 8;
 		self.types["enemy_corral"] = 9;
+		self.types["corral_dist"] = 10;
 		
 		self.move_to_string = dict();
 		self.move_to_string[(0,0)] = "skip";
@@ -233,7 +236,7 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 		self.move_to_string[(-1,1)] = "southwest";
 		self.move_to_string[(1,-1)] = "northeast";
 		
-		self.block = np.array([0,1,1,1,1,1,0,1,0,0]);
+		self.block = np.array([0,1,1,1,1,1,0,1,0,0,0]);
 		
 		self.fullmap = np.zeros((width,height,len(self.types)));
 		
@@ -344,7 +347,52 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 		return out;
 		
 		
+	def update_dists(self):
+		explored = set();
+		explore_q = Queue();
 		
+		start_x = (self.corral_x0 + self.corral_x1) / 2;
+		start_y = (self.corral_y0 + self.corral_y1) / 2;
+		start_pos = (start_x, start_y);
+		
+		explored.add(start_pos);		
+		explore_q.put(start_pos);
+		
+		while not explore_q.empty():
+			base_pos = explore_q.get();
+			base_dist = shared.feature_at(base_pos,"corral_dist");
+			
+			# get neighbors
+			for dx in range(-1,2):
+				x = base_pos[0] + dx;
+				if(x < 0 or x >= shared.width): #if outside map
+					continue;
+					
+				for dy in range(-1,2):					
+					y = base_pos[1] + dy;
+					if(y < 0 or y >= shared.width): #if outside map
+						continue;
+					
+					pos = (x,y);
+					explored.add(pos);
+					
+					if(pos in explored): #if already explored
+						continue;
+						
+					if(shared.feature_at(pos,"tree") >= 1): #if tree = no dist
+						continue;
+						
+					if(shared.feature_at(pos,"button") >= 1): #if button = no dist
+						continue;
+					
+					dist = base_dist + 1;
+					old_dist = shared.feature_at(base_pos,"corral_dist");
+					
+					
+					explore_q.put(pos);
+					shared.modmap(pos, "corral_dist", min(dist, old_dist));
+			
+
 		
 if __name__ == "__main__":
 	main();
