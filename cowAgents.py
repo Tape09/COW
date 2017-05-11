@@ -352,8 +352,8 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 		explored = set();
 		explore_q = Queue();
 		
-		start_x = (self.corral_x0 + self.corral_x1) / 2;
-		start_y = (self.corral_y0 + self.corral_y1) / 2;
+		start_x = int((self.corral_x0 + self.corral_x1) / 2);
+		start_y = int((self.corral_y0 + self.corral_y1) / 2);
 		start_pos = (start_x, start_y);
 		
 		explored.add(start_pos);		
@@ -361,6 +361,8 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 		
 		while not explore_q.empty():
 			base_pos = explore_q.get();
+			# print(base_pos);
+			# print(shared.at(base_pos));
 			base_dist = shared.feature_at(base_pos,"corral_dist");
 			
 			# get neighbors
@@ -377,6 +379,9 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 					pos = (x,y);
 					explored.add(pos);
 					
+					if(shared.feature_at(pos,"explored") == 0):
+						continue;
+					
 					if(pos in explored): #if already explored
 						continue;
 						
@@ -385,6 +390,8 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 						
 					if(shared.feature_at(pos,"button") >= 1): #if button = no dist
 						continue;
+					
+					
 					
 					dist = base_dist + 1;
 					old_dist = shared.feature_at(base_pos,"corral_dist");
