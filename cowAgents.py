@@ -175,7 +175,11 @@ def handle_ra(root,agent_index): # HANDLE DISTANCE TO CORRAL CALCULATIONS HERE?
 			elif(stype == "obstacle"):
 				features[shared.types["tree"]] = 1;
 			elif(stype == "cow"):
-				features[shared.types["cow"]] = 1; # COW ID POSSIBLE TO GET BUT DONT DO IT
+				cow_id = int(s.attrib["ID"]);
+				if(cow_id in shared.cows):
+					shared.modmap(shared.cows[cow_id],"cow",0);
+				shared.cows[cow_id] = (x,y);
+				features[shared.types["cow"]] = cow_id;				
 			elif(stype == "corral"):
 				if(s.attrib["type"] == "ally"):
 					features[shared.types["my_corral"]] = 1;
@@ -205,6 +209,7 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 		
 		self.cows_in_corral = 0;
 		self.agents = [(0,0)] * n_agents;
+		self.cows = dict();
 		self.types = dict();
 		self.types["explored"] = 0;
 		self.types["tree"] = 1;
@@ -307,28 +312,28 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 				if(self.fullmap[w,h,self.types["explored"]] == 0):
 					# print("?",end="");
 					out += "?";
-				elif(self.fullmap[w,h,self.types["tree"]] == 1):
+				elif(self.fullmap[w,h,self.types["tree"]] >= 1):
 					# print("#",end="");
 					out += "#";
-				elif(self.fullmap[w,h,self.types["my_agent"]] == 1):
+				elif(self.fullmap[w,h,self.types["my_agent"]] >= 1):
 					# print("X",end="");
 					out += "X";
-				elif(self.fullmap[w,h,self.types["enemy_agent"]] == 1):
+				elif(self.fullmap[w,h,self.types["enemy_agent"]] >= 1):
 					# print("E",end="");
 					out += "E";
-				elif(self.fullmap[w,h,self.types["button"]] == 1):
+				elif(self.fullmap[w,h,self.types["button"]] >= 1):
 					# print("O",end="");
 					out += "B";
-				elif(self.fullmap[w,h,self.types["cow"]] == 1):
+				elif(self.fullmap[w,h,self.types["cow"]] >= 1):
 					# print("O",end="");
 					out += "ö";
-				elif(self.fullmap[w,h,self.types["closed_fence"]] == 1):
+				elif(self.fullmap[w,h,self.types["closed_fence"]] >= 1):
 					# print("=",end="");
 					out += "=";
-				elif(self.fullmap[w,h,self.types["my_corral"]] == 1):
+				elif(self.fullmap[w,h,self.types["my_corral"]] >= 1):
 					# print(".",end="");
 					out += ".";
-				elif(self.fullmap[w,h,self.types["enemy_corral"]] == 1):
+				elif(self.fullmap[w,h,self.types["enemy_corral"]] >= 1):
 					# print(",",end="");
 					out += ",";
 				else:
