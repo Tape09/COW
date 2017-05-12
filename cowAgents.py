@@ -250,18 +250,18 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 		self.final_score = None;
 		self.final_result = None;
 		
-		# set borders to explored + tree
-		for w in range(self.width):
-			self.modmap((w,0),"explored",1);
-			self.modmap((w,self.height-1),"explored",1);
-			self.modmap((w,0),"tree",1);
-			self.modmap((w,self.height-1),"tree",1);
+		# set borders to explored + tree # NO; BAD
+		# for w in range(self.width):
+			# self.modmap((w,0),"explored",1);
+			# self.modmap((w,self.height-1),"explored",1);
+			# self.modmap((w,0),"tree",1);
+			# self.modmap((w,self.height-1),"tree",1);
 			
-		for h in range(self.height):
-			self.modmap((0,h),"explored",1);
-			self.modmap((self.width-1,h),"explored",1);
-			self.modmap((0,h),"tree",1);
-			self.modmap((self.width-1,h),"tree",1);
+		# for h in range(self.height):
+			# self.modmap((0,h),"explored",1);
+			# self.modmap((self.width-1,h),"explored",1);
+			# self.modmap((0,h),"tree",1);
+			# self.modmap((self.width-1,h),"tree",1);
 	
 	def setmap(self,x,y,features):
 		self.fullmap[x,y] = features;
