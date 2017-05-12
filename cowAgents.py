@@ -14,7 +14,7 @@ def make_decision(agent_index):
 	global shared;
 	
 	# print (shared);
-	print (shared.fullmap[1:20,1:20,10]);
+	# print (shared.fullmap[1:20,1:20,10]);
 	
 	x, y = shared.agents[agent_index];
 	moves = shared.valid_moves(agent_index);
@@ -189,10 +189,9 @@ def handle_ra(root,agent_index): # HANDLE DISTANCE TO CORRAL CALCULATIONS HERE?
 				else:
 					features[shared.types["enemy_corral"]] = 1;
 			elif(stype == "switch"):
-				features[shared.types["button"]] = 1;
-			
+				features[shared.types["button"]] = 1;			
 		shared.setmap(x,y,features);
-		shared.update_dists();
+	shared.update_dists();
 	return id;
 		
 class SharedMemory:	# NEED TO ADD DIST TO CORRAL
@@ -349,6 +348,7 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 			out += "\n";
 					
 		return out;
+		
 		
 		
 	def update_dists(self):
