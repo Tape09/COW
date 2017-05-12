@@ -6,7 +6,7 @@ import random;
 from lxml import etree
 import time
 import sys;
-from queue import Queue;
+from queue import Queue, PriorityQueue;
 
 shared = None;
 
@@ -19,7 +19,32 @@ def make_decision(agent_index):
 	x, y = shared.agents[agent_index];
 	moves = shared.valid_moves(agent_index);
 	
-	my_move = random.choice(moves);
+	# explore phase
+	
+	nearest_unexplored_path = [];
+	nearest_unexplored_dist = 99999999;
+	# find nearest unexplored spot
+	for i in range(100):
+		x1 = random.randint(0,shared.width-1);
+		y1 = random.randint(0,shared.height-1);
+		if(not shared.feature_at((x1,y1),"explored")):
+			path, dist = calc_path((x,y),(x1,y1));			
+	
+			if(dist < nearest_unexplored_dist):
+				nearest_unexplored_dist = dist;
+				nearest_unexplored_path = path;
+	
+	if(len(nearest_unexplored_path) > 0): # go there
+		destination = nearest_unexplored_path[0];
+		dx = destination[0] - x;
+		dy = destination[1] - y;
+		assert(dx in [-1,0,1],"INVALID MOVE dx="+str(dx));
+		assert(dy in [-1,0,1],"INVALID MOVE dy="+str(dy));
+		my_move = (dx,dy);
+	else:
+		my_move = random.choice(moves);
+	
+	# my_move = random.choice(moves);
 	
 	return my_move;
 	
@@ -29,6 +54,84 @@ def end_game():
 	print("RESULT:", shared.final_result);
 	print("SCORE:", shared.final_score);
 	
+	
+def grid_dist(posA,posB):
+	return max(abs(posA[0] - posB[0]), abs(posA[1] - posB[1]));
+	
+class Node:
+	def __init__(self,pos,prev = None):
+		self.pos = pos;
+		self.prev = prev;
+	
+def calc_path(posA,posB): # from A to B
+	# A star search to find path from A to B
+	# return list of positions. excluding posA, includeing posB.
+	global shared;
+	
+	out = [];
+	
+	visited = set();
+	q = PriorityQueue();	
+	dist = grid_dist(posA,posB);
+	counter = 0;
+	q.put( (dist,counter,Node(posA)) );
+	counter += 1;
+	visited.add(posA);
+	
+	while not q.empty():
+		N = q.get()[2];
+		if(N.pos == posB):
+			temp = N;
+			while temp.prev != None:
+				out.append(temp.pos);
+				temp = temp.prev;
+				
+			out.reverse();
+			return out, len(out);
+			
+		neighbors = get_neighbors(N.pos);
+		for neighbor in neighbors:
+			if(neighbor in visited):
+				continue;
+			if(shared.free_at(neighbor)):
+			# if(free_at_fake(neighbor)):
+				dist = grid_dist(neighbor,posB);
+				q.put((dist,counter,Node(neighbor,N)));
+				counter += 1;
+				visited.add(neighbor);
+		
+	return out, np.inf;
+	
+
+def free_at_fake(pos):
+	width = 7;
+	height = 7;
+
+	if(pos[0] < 0 or pos[0] >= width):
+		return False;
+	if(pos[1] < 0 or pos[1] >= height):
+		return False;
+	
+	return(not (pos[1] == 3 and pos[0] > 0));
+	
+def test_pathfinding():
+	posA = (6,0);
+	posB = (6,6);
+	
+	path = calc_path(posA,posB);
+	print(len(path),path)
+	
+	
+def get_neighbors(pos):
+	out = [None] * 8;
+	idx = 0;
+	for x in range(-1,2):
+		for y in range(-1,2):
+			if x==0 and y==0:
+				continue;
+			out[idx] = (pos[0] + x, pos[1] + y);
+			idx += 1;
+	return out;
 	
 def main():
 	n_agents = 20;
@@ -106,6 +209,9 @@ def handle_raw_message(data,agent_index):
 		move = make_decision(agent_index);
 		string_move = shared.move_to_string[move];
 		response = create_action_message(string_move,id);
+		# print(data);
+		# print(response)
+		# print();
 	elif(root.attrib["type"] == "sim-start"):
 		handle_simstart(root);
 	elif(root.attrib["type"] == "auth-response"):
@@ -276,6 +382,10 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 		return self.fullmap[pos[0],pos[1]];
 		
 	def free_at(self,pos):
+		if(pos[0] < 0 or pos[0] >= self.width ):
+			return False;
+		if(pos[1] < 0 or pos[1] >= self.height ):
+			return False;
 		return not np.dot(self.at(pos),self.block);
 		
 		
