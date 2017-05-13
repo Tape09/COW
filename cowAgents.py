@@ -19,30 +19,28 @@ def make_decision(agent_index):
 	x, y = shared.agents[agent_index];
 	moves = shared.valid_moves(agent_index);
 	
-	# explore phase
+	has_objective = (shared.objectives[agent_index] != None) and (not shared.objectives[agent_index].complete());
 	
-	nearest_unexplored_path = [];
-	nearest_unexplored_dist = 99999999;
-	# find nearest unexplored spot
-	for i in range(100):
-		x1 = random.randint(0,shared.width-1);
-		y1 = random.randint(0,shared.height-1);
-		if(not shared.feature_at((x1,y1),"explored")):
-			path, dist = calc_path((x,y),(x1,y1));			
+	# try explore
+	if(not has_objective):
+		nearest_unexplored_path,dist = shared.find_nearest((x,y),"explored",True,50);
+		if(len(nearest_unexplored_path) > 0):	
+			shared.objectives[agent_index] = Objective("explore",(x,y),nearest_unexplored_path[-1],nearest_unexplored_path);
+			has_objective = True;
 	
-			if(dist < nearest_unexplored_dist):
-				nearest_unexplored_dist = dist;
-				nearest_unexplored_path = path;
+	#can add other objectives here
 	
-	if(len(nearest_unexplored_path) > 0): # go there
-		destination = nearest_unexplored_path[0];
-		dx = destination[0] - x;
-		dy = destination[1] - y;
-		assert(dx in [-1,0,1],"INVALID MOVE dx="+str(dx));
-		assert(dy in [-1,0,1],"INVALID MOVE dy="+str(dy));
-		my_move = (dx,dy);
-	else:
+	
+	if(not has_objective): # failed to explore
 		my_move = random.choice(moves);
+	else:	# has objective
+		my_move = shared.objectives[agent_index].next_move((x,y));
+
+	
+	# something went wrong (path blocked or something)
+	if(my_move == None):
+		my_move = random.choice(moves);
+
 	
 	# my_move = random.choice(moves);
 	
@@ -63,7 +61,7 @@ class Node:
 		self.pos = pos;
 		self.prev = prev;
 	
-def calc_path(posA,posB): # from A to B
+def calc_path(posA,posB, limit = 0): # from A to B
 	# A star search to find path from A to B
 	# return list of positions. excluding posA, includeing posB.
 	global shared;
@@ -96,6 +94,9 @@ def calc_path(posA,posB): # from A to B
 			if(shared.free_at(neighbor)):
 			# if(free_at_fake(neighbor)):
 				dist = grid_dist(neighbor,posB);
+				if(limit > 0):
+					if(dist > limit):
+						continue;
 				q.put((dist,counter,Node(neighbor,N)));
 				counter += 1;
 				visited.add(neighbor);
@@ -299,7 +300,44 @@ def handle_ra(root,agent_index): # HANDLE DISTANCE TO CORRAL CALCULATIONS HERE?
 		shared.setmap(x,y,features);
 	shared.update_dists();
 	return id;
+	
+def valid_move(move):
+	return (move[0] in [-1,0,1]) and (move[1] in [-1,0,1]);
+	
+class Objective:
+	def __init__(self,type,posA,posB,moves = None):
+		self.type = type;
+		if(moves == None):
+			self.moves = calc_path(posA,posB);
+		else:
+			self.moves = moves;
+		self.goal = posB;
+		self.index = 0;
+
+	def next_move(self,my_pos):
+		pos = self.moves[self.index];
+		move = (pos[0]-my_pos[0], pos[1]-my_pos[1]);
+		if shared.free_at(pos) and valid_move(move): #if next move is free and valid
+			self.index += 1;
+			return move;
+		else: # if not free/valid. calc new path
+			self.moves, dist = calc_path(my_pos,self.goal);
+			if(len(self.moves) == 0):
+				return None; #no path exists				
+			
+			self.index = 0;
+			return self.next_move(my_pos);
 		
+	def complete(self):
+		global shared;
+		if(len(self.moves) == 0):
+			return True;
+	
+		if(type == "explore"):
+			return shared.feature_at(self.moves[-1],"explored");
+				
+		return True;
+	
 class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 	# fullmap 3rd dimension code:
 	# 0 : explored
@@ -318,6 +356,7 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 		
 		self.cows_in_corral = 0;
 		self.agents = [(0,0)] * n_agents;
+		self.objectives = [None] * n_agents;
 		self.cows = dict();
 		self.types = dict();
 		self.types["explored"] = 0;
@@ -387,6 +426,42 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 		if(pos[1] < 0 or pos[1] >= self.height ):
 			return False;
 		return not np.dot(self.at(pos),self.block);
+		
+	def find_nearest(self,pos,type, inverse = False, limit = 0):
+		visited = set();
+		q = Queue();
+		
+		out = [];
+		
+		q.put((Node(pos),0));
+		visited.add(pos);
+		
+		while not q.empty():
+			N, dist = q.get();
+			
+			if(limit > 0):
+				if(dist > limit):
+					break;
+			
+			if(bool(inverse) != bool(self.feature_at(N.pos,type) > 0)): #found feature
+				temp = N;
+				while temp.prev != None:
+					out.append(temp.pos);
+					temp = temp.prev;
+					
+				out.reverse();
+				return out, len(out);
+			
+			
+			neighbors = get_neighbors(N.pos);
+			random.shuffle(neighbors)
+			for neighbor in neighbors:
+				if(neighbor in visited):
+					continue;
+				if(shared.free_at(neighbor)):
+					q.put((Node(neighbor,N),dist+1));
+					visited.add(neighbor);			
+		return out, np.inf;
 		
 		
 	def valid_moves(self, idx):
