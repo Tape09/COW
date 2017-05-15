@@ -423,7 +423,7 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 			# self.modmap((0,h),"tree",1);
 			# self.modmap((self.width-1,h),"tree",1);
 	
-	def inside_map(pos):
+	def inside_map(self,pos):
 		if(pos[0] < 0 or pos[0] >= self.width ):
 			return False;
 		if(pos[1] < 0 or pos[1] >= self.height ):
