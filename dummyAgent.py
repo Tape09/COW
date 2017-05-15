@@ -17,35 +17,7 @@ def make_decision(agent_index):
 	moves = shared.valid_moves(agent_index);
 	
 	
-	
-	
-	
-	has_objective = (shared.objectives[agent_index] != None) and (not shared.objectives[agent_index].complete());
-	
-	# try explore
-	if(not has_objective):
-		nearest_unexplored_path,dist = shared.find_nearest((x,y),"explored",True,50);
-		if(len(nearest_unexplored_path) > 0):	
-			shared.objectives[agent_index] = Objective("explore",(x,y),nearest_unexplored_path[-1],nearest_unexplored_path);
-			has_objective = True;
-	
-	#can add other objectives here
-	
-	
-	if(not has_objective): # failed to explore
-		my_move = random.choice(moves);
-	else:	# has objective
-		my_move = shared.objectives[agent_index].next_move((x,y));
-
-	
-	# something went wrong (path blocked or something)
-	if(my_move == None):
-		my_move = random.choice(moves);
-
-	
-	# my_move = random.choice(moves);
-	
-	return my_move;
+	return (0,0);
 	
 def end_game():
 	global shared;
