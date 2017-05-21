@@ -72,6 +72,8 @@ def make_decision(agent_index):
 					new_ends = [(end_point[0]+1,end_point[1]),(end_point[0]-1,end_point[1]),(end_point[0],end_point[1]+1),(end_point[0],end_point[1]-1)];
 					good_end = False;
 					for new_end in new_ends:
+						if(shared.feature_at(new_end,"closed_fence") or shared.feature_at(new_end,"open_fence")):
+							continue;
 						if(new_end[0] == button[0] or new_end[1] == button[1]):
 							good_end = True;
 							path.append(new_end);
@@ -106,19 +108,23 @@ def make_decision(agent_index):
 	
 	if(shared.objectives[agent_index] != None):
 		if(shared.objectives[agent_index].type == "button"):
-			print((x,y),shared.objectives[agent_index].index,shared.objectives[agent_index].moves )
+			print(agent_index,(x,y),shared.objectives[agent_index].index,shared.objectives[agent_index].moves )
 	
 	if(not has_objective): # failed to explore
 		my_move = random.choice(moves);
 	else:	# has objective
 		my_move = shared.objectives[agent_index].next_move();
 
+	# if(shared.objectives[agent_index] != None):
+		# if(shared.objectives[agent_index].type == "button"):
+			# print(my_move)
 	
-	# something went wrong (path blocked or something)
+	# something went wrong (path blocked or something) and objective became impossible
 	if(my_move == None):
 		my_move = random.choice(moves);
+			shared.objectives[agent_index] = None; # should be something smarter
 
-	
+
 	# my_move = random.choice(moves);
 	# if(my_move == (0,0)):
 		# if(shared.objectives[agent_index] != None):
@@ -127,6 +133,145 @@ def make_decision(agent_index):
 			
 	
 	return my_move;
+
+class Objective:
+	pass
+	
+class ObjectiveExplore(Objective):
+	def __init__(self,agent_index, posA,posB,moves = None):
+		self.agent_index = agent_index;
+		if(moves == None):
+			self.moves = calc_path(posA,posB);
+		else:
+			self.moves = moves;
+		self.goal = posB;
+		self.index = 0;
+		self.type = "explore";
+
+	def next_move(self):		
+		global shared
+		my_pos = shared.agents[self.agent_index];
+		if(my_pos == self.moves[self.index-1]):
+			self.index -= 1;
+		
+		pos = self.moves[self.index];
+		move = (pos[0]-my_pos[0], pos[1]-my_pos[1]);
+		if shared.free_at(pos) and valid_move(move): #if next move is free and valid
+			self.index += 1;
+			return move;
+		else: # if not free/valid. calc new path
+			self.moves, dist = calc_path(my_pos,self.goal);
+			if(len(self.moves) == 0):
+				return None; #no path exists				
+			
+			self.index = 0;
+			return self.next_move();
+		
+	def complete(self):
+		global shared;
+			
+		if(self.index >= len(self.moves)):
+			return True;
+	
+		return shared.feature_at(self.moves[-1],"explored");
+		
+class ObjectiveMove(Objective):
+	def __init__(self,agent_index,posA,posB,moves = None):
+		self.agent_index = agent_index;
+		if(moves == None):
+			self.moves = calc_path(posA,posB);
+		else:
+			self.moves = moves;
+		self.goal = self.moves[-1];
+		self.index = 0;
+		self.type = "move";
+
+	def next_move(self):
+		global shared
+		if(self.index >= len(self.moves)):
+			return None;
+		my_pos = shared.agents[self.agent_index];
+		if(my_pos == self.moves[self.index-1]):
+			self.index -= 1;
+		pos = self.moves[self.index];
+		move = (pos[0]-my_pos[0], pos[1]-my_pos[1]);
+		if shared.free_at(pos) and valid_move(move): #if next move is free and valid
+			self.index += 1;
+			return move;
+		else: # if not free/valid. calc new path
+			self.moves, dist = calc_path(my_pos,self.goal);
+			if(len(self.moves) == 0):
+				return None; #no path exists				
+			
+			self.index = 0;
+			return self.next_move();
+		
+	def complete(self):
+		return (self.index >= len(self.moves));
+
+class ObjectiveButton(Objective):
+	def __init__(self,agent_index,posA,posB,button, moves = None):
+		self.agent_index = agent_index;
+		if(moves == None):
+			self.moves = calc_path(posA,posB);
+		else:
+			self.moves = moves;
+		self.goal = self.moves[-1];
+		self.index = 0;
+		self.button = button;
+		self.type="button";
+
+	def next_move(self):
+		global shared;
+			
+		my_pos = shared.agents[self.agent_index];
+		if(self.index > 0):
+			if(my_pos != self.moves[self.index-1]):
+				self.index -= 1;
+			
+		if(my_pos == self.goal):
+			return (0,0);
+		
+		pos = self.moves[self.index];
+		move = (pos[0]-my_pos[0], pos[1]-my_pos[1]);
+		if shared.free_at(pos) and valid_move(move): #if next move is free and valid
+			self.index += 1;
+			print(self.moves);
+			return move;
+		else: # if not free/valid. calc new path
+			self.moves, dist = calc_path(my_pos,self.goal);
+			if(len(self.moves) == 0):
+				return None; #no path exists				
+			
+			self.index = 0;
+			return self.next_move();
+		
+	def complete(self):
+		global shared;
+
+		if(not self.button in shared.buttons):
+			return True;
+			
+		# for i,pos in enumerate(shared.agents): #check if another agent is already going for this btton
+			# if(i == self.agent_index):
+				# continue;
+			# if(shared.objectives[i] != None):
+				# if(shared.objectives[i].type == "button"):
+					# if(shared.objectives[i].button == self.button):
+						# return True;
+			
+		zone = shared.fence_zone(self.button);
+		if(zone == None):
+			return True;
+			
+		#check if any agents in zone, ignore self
+		for pos in shared.agents:
+			if shared.agents[self.agent_index] == pos:
+				continue;
+			if(point_in_zone(pos,zone)):
+				return False;
+				
+		return True;
 	
 def end_game():
 	global shared;
@@ -418,7 +563,10 @@ def handle_ra(root,agent_index): # HANDLE DISTANCE TO CORRAL CALCULATIONS HERE?
 					shared.buttons[(x,y)] = fence;
 				
 		shared.setmap(x,y,features);
-	shared.update_dists();
+		
+	if not id in shared.request_ids: #only once per round
+		shared.update_dists();
+		shared.request_ids.add(id);
 	return id;
 	
 def valid_move(move):
@@ -430,142 +578,7 @@ def point_in_zone(pos,zone):
 	return pos[0] >= zone[0] and pos[0] <= zone[1] and pos[1] >= zone[2] and pos[1] <= zone[3];
 	
 		
-class Objective:
-	pass
-	
-class ObjectiveExplore(Objective):
-	def __init__(self,agent_index, posA,posB,moves = None):
-		self.agent_index = agent_index;
-		if(moves == None):
-			self.moves = calc_path(posA,posB);
-		else:
-			self.moves = moves;
-		self.goal = posB;
-		self.index = 0;
-		self.type = "explore";
 
-	def next_move(self):		
-		global shared
-		my_pos = shared.agents[self.agent_index];
-		if(my_pos == self.moves[self.index-1]):
-			self.index -= 1;
-		
-		pos = self.moves[self.index];
-		move = (pos[0]-my_pos[0], pos[1]-my_pos[1]);
-		if shared.free_at(pos) and valid_move(move): #if next move is free and valid
-			self.index += 1;
-			return move;
-		else: # if not free/valid. calc new path
-			self.moves, dist = calc_path(my_pos,self.goal);
-			if(len(self.moves) == 0):
-				return None; #no path exists				
-			
-			self.index = 0;
-			return self.next_move();
-		
-	def complete(self):
-		global shared;
-			
-		if(self.index >= len(self.moves)):
-			return True;
-	
-		return shared.feature_at(self.moves[-1],"explored");
-		
-class ObjectiveMove(Objective):
-	def __init__(self,agent_index,posA,posB,moves = None):
-		self.agent_index = agent_index;
-		if(moves == None):
-			self.moves = calc_path(posA,posB);
-		else:
-			self.moves = moves;
-		self.goal = self.moves[-1];
-		self.index = 0;
-		self.type = "move";
-
-	def next_move(self):
-		global shared
-		if(self.index >= len(self.moves)):
-			return None;
-		my_pos = shared.agents[self.agent_index];
-		if(my_pos == self.moves[self.index-1]):
-			self.index -= 1;
-		pos = self.moves[self.index];
-		move = (pos[0]-my_pos[0], pos[1]-my_pos[1]);
-		if shared.free_at(pos) and valid_move(move): #if next move is free and valid
-			self.index += 1;
-			return move;
-		else: # if not free/valid. calc new path
-			self.moves, dist = calc_path(my_pos,self.goal);
-			if(len(self.moves) == 0):
-				return None; #no path exists				
-			
-			self.index = 0;
-			return self.next_move();
-		
-	def complete(self):
-		return (self.index >= len(self.moves));
-
-class ObjectiveButton(Objective):
-	def __init__(self,agent_index,posA,posB,button, moves = None):
-		self.agent_index = agent_index;
-		if(moves == None):
-			self.moves = calc_path(posA,posB);
-		else:
-			self.moves = moves;
-		self.goal = self.moves[-1];
-		self.index = 0;
-		self.button = button;
-		self.type="button";
-
-	def next_move(self):
-		global shared;
-			
-		my_pos = shared.agents[self.agent_index];
-		if(my_pos == self.moves[self.index-1]):
-			self.index -= 1;
-			
-		if(my_pos == self.goal):
-			return (0,0);
-		
-		pos = self.moves[self.index];
-		move = (pos[0]-my_pos[0], pos[1]-my_pos[1]);
-		if shared.free_at(pos) and valid_move(move): #if next move is free and valid
-			self.index += 1;
-			return move;
-		else: # if not free/valid. calc new path
-			self.moves, dist = calc_path(my_pos,self.goal);
-			if(len(self.moves) == 0):
-				return None; #no path exists				
-			
-			self.index = 0;
-			return self.next_move();
-		
-	def complete(self):
-		global shared;
-
-		if(not self.button in shared.buttons):
-			return True;
-			
-		# for i,pos in enumerate(shared.agents): #check if another agent is already going for this btton
-			# if(i == self.agent_index):
-				# continue;
-			# if(shared.objectives[i] != None):
-				# if(shared.objectives[i].type == "button"):
-					# if(shared.objectives[i].button == self.button):
-						# return True;
-			
-		zone = shared.fence_zone(self.button);
-		if(zone == None):
-			return True;
-			
-		#check if any agents in zone, ignore self
-		for pos in shared.agents:
-			if shared.agents[self.agent_index] == pos:
-				continue;
-			if(point_in_zone(pos,zone)):
-				return False;
-				
-		return True;
 
 	
 class SharedMemory:	# NEED TO ADD DIST TO CORRAL
@@ -591,7 +604,9 @@ class SharedMemory:	# NEED TO ADD DIST TO CORRAL
 		self.cows = dict();
 		self.types = dict();
 		
-		self.buttons = dict();		
+		self.buttons = dict();	
+
+		self.request_ids = set();
 		
 		self.types["explored"] = 0;
 		self.types["tree"] = 1;
