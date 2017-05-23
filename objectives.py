@@ -92,8 +92,6 @@ class ObjectiveButton(Objective):
         self.type = "button";
 
     def next_move(self):
-        # global sm.shared;
-
         my_pos = sm.shared.agents[self.agent_index];
         if (self.index > 0):
             if (my_pos != self.moves[self.index - 1]):
@@ -118,27 +116,19 @@ class ObjectiveButton(Objective):
 
     def complete(self):
         # global sm.shared;
+        return False
 
-        if (not self.button in sm.shared.buttons):
-            return True;
-
-        # for i,pos in enumerate(sm.shared.agents): #check if another agent is already going for this btton
-        # if(i == self.agent_index):
-        # continue;
-        # if(sm.shared.objectives[i] != None):
-        # if(sm.shared.objectives[i].type == "button"):
-        # if(sm.shared.objectives[i].button == self.button):
-        # return True;
-
-        zone = sm.shared.fence_zone(self.button);
-        if (zone == None):
-            return True;
-
+        # if (not self.button in sm.shared.buttons):
+        #     return True;
+        # zone = sm.shared.fence_zone(self.button);
+        # if (zone == None):
+        #     return True;
+        #
         # check if any agents in zone, ignore self
-        for pos in sm.shared.agents:
-            if sm.shared.agents[self.agent_index] == pos:
-                continue;
-            if (point_in_zone(pos, zone)):
-                return False;
-
-        return True;
+        # for pos in sm.shared.agents:
+        #     if sm.shared.agents[self.agent_index] == pos:
+        #         continue;
+        #     if (point_in_zone(pos, zone)):
+        #         return False;
+        #
+        # return True;

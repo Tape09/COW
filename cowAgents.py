@@ -8,28 +8,19 @@ sm.shared = None;
 
 
 def make_decision(agent_index):
-    # global sm.shared;
-
     x, y = sm.shared.agents[agent_index];
     moves = sm.shared.valid_moves(agent_index);
-
-    # has_objective = (sm.shared.objectives[agent_index] != None) and (not sm.shared.objectives[agent_index].complete());
-
-    if (sm.shared.objectives[agent_index] != None):
-        if (sm.shared.objectives[agent_index].type == "button"):
-            print(sm.shared.objectives[agent_index].complete());
-
-    # iterate over buttons
+    # iterate over buttons we have seen
     for button in sm.shared.buttons:
-        zone = sm.shared.fence_zone(button);
+        zone = sm.shared.fence_zone(button);#rect around fence
+        if (zone == None):#don't where the fence is yet
+            continue;
+        if (len(sm.shared.buttons[button]) == 0):#button without fence
+            continue;
+        if (not sm.shared.feature_at(sm.shared.buttons[button][0], "closed_fence")):#if the fence is open, continue
+            continue;
+	    #if any agent is trying to control the button
         skip = False;
-        if (zone == None):
-            continue;
-        if (len(sm.shared.buttons[button]) == 0):
-            continue;
-        if (not sm.shared.feature_at(sm.shared.buttons[button][0], "closed_fence")):
-            continue;
-
         for objective in sm.shared.objectives:
             if objective == None:
                 continue;
@@ -37,21 +28,22 @@ def make_decision(agent_index):
                 if objective.button == button:
                     skip = True;
                     break;
-
+		#there is already an agent working on this
         if (skip):
             continue;
 
         # if close to a closed fence
         if (point_in_zone((x, y), zone)):
-            # check if other agents in zone
-            push_button = False;
-            for i, apos in enumerate(sm.shared.agents):
-                if (i == agent_index):
-                    continue;
-                if (point_in_zone(apos, zone)):
-                    push_button = True;
-                    break;
+            # push_button = False;
+            # # check if other agents in zone
+            # for i, apos in enumerate(sm.shared.agents):
+            #     if (i == agent_index):
+            #         continue;
+            #     if (point_in_zone(apos, zone)):
+            #         push_button = True;
+            #         break;
 
+            push_button = True
             if (push_button):
                 # select nearest agent to corresponding button
                 path, dist = sm.shared.find_nearest(button, "my_agent", limit=50);
@@ -89,7 +81,7 @@ def make_decision(agent_index):
                     if (sm.shared.objectives[i] != None):
                         if (sm.shared.objectives[i].type == "button"):
                             if (sm.shared.objectives[i].button == button):
-                                sm.shared.objectives[i] == None;
+                                sm.shared.objectives[i] = None;
 
     has_objective = (sm.shared.objectives[agent_index] != None) and (not sm.shared.objectives[agent_index].complete());
 
@@ -97,38 +89,18 @@ def make_decision(agent_index):
     if (not has_objective):
         nearest_unexplored_path, dist = sm.shared.find_nearest((x, y), "explored", True, 50);
         if (len(nearest_unexplored_path) > 0):
-            sm.shared.objectives[agent_index] = ObjectiveExplore(agent_index, (x, y), nearest_unexplored_path[-1],
-                                                              moves=nearest_unexplored_path);
+            sm.shared.objectives[agent_index] = ObjectiveExplore(agent_index, (x, y), nearest_unexplored_path[-1],moves=nearest_unexplored_path);
             has_objective = True;
-
-    # can add other objectives here
-
-
-    if (sm.shared.objectives[agent_index] != None):
-        if (sm.shared.objectives[agent_index].type == "button"):
-            print(agent_index, (x, y), sm.shared.objectives[agent_index].index, sm.shared.objectives[agent_index].moves)
 
     if (not has_objective):  # failed to explore
         my_move = random.choice(moves);
     else:  # has objective
         my_move = sm.shared.objectives[agent_index].next_move();
 
-    # if(sm.shared.objectives[agent_index] != None):
-    # if(sm.shared.objectives[agent_index].type == "button"):
-    # print(my_move)
-
     # something went wrong (path blocked or something) and objective became impossible
     if (my_move == None):
         my_move = random.choice(moves);
         sm.shared.objectives[agent_index] = None;  # should be something smarter
-
-    # my_move = random.choice(moves);
-    # if(my_move == (0,0)):
-    # if(sm.shared.objectives[agent_index] != None):
-    # if(sm.shared.objectives[agent_index].type == "button"):
-    # print((x,y),sm.shared.objectives[agent_index].index,sm.shared.objectives[agent_index].moves )
-
-
     return my_move;
 
 
