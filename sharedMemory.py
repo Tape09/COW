@@ -31,6 +31,7 @@ class SharedMemory:  # NEED TO ADD DIST TO CORRAL
         self.buttons = dict();
 
         self.request_ids = set();
+        self.iteration = 0;
 
         self.types["explored"] = 0;
         self.types["tree"] = 1;

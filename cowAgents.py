@@ -85,6 +85,24 @@ def make_decision(agent_index):
 
     has_objective = (sm.shared.objectives[agent_index] != None) and (not sm.shared.objectives[agent_index].complete());
 
+    
+    # TESTING STUFF ##########
+    
+    if(sm.shared.iteration > 10):
+        if(sm.shared.objectives[agent_index].type != "button"):
+            if(agent_index != 0):
+                for i in range(20):
+                    follow_id = (agent_index + i + 1) % 20;
+                    if(sm.shared.objectives[follow_id].type == "button"):
+                        continue;
+                    else:
+                        break;
+                sm.shared.objectives[agent_index] = ObjectiveFollow(agent_index,follow_id);
+    
+    
+    ##########################
+    
+
     # try explore
     if (not has_objective):
         nearest_unexplored_path, dist = sm.shared.find_nearest((x, y), "explored", True, 50);
@@ -103,5 +121,49 @@ def make_decision(agent_index):
         sm.shared.objectives[agent_index] = None;  # should be something smarter
     return my_move;
 
-
-
+def relink_followers(agent_index):  # makes all agent that are following me, follow who I am following. If not following anyone, set objective to none
+    followers = following_me(agent_index);
+    if(len(followers) == 0):
+        return;
+                
+    # if someone is following me;   
+    
+    #if I am following someone, make guys behind me follow who I am following
+    if sm.shared.objectives[agent_index.type] == "follow":   
+        my_leader = sm.shared.objectives[agent_index.type].other_agent_index;
+        for f in followers:
+            sm.shared.objectives[f].other_agent_index = my_leader;
+    else:
+        for f in followers:
+            sm.shared.objectives[f].other_agent_index = None; # something smarter maybe?
+    
+    
+        
+        
+def following_me(agent_index): # return a list of agents that are following me
+    followers = [];
+    
+    for i, pos in enumerate(sm.agents):
+        if(sm.objectives[i] == None):
+            continue;
+        
+        if(sm.objectives[i].type == "follow"):
+            if(sm.objectives[i].other_agent_index == agent_idx):
+                followers.append(i);
+            
+    return followers;
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            

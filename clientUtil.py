@@ -178,6 +178,7 @@ def handle_ra(root, agent_index):  # HANDLE DISTANCE TO CORRAL CALCULATIONS HERE
         sm.shared.setmap(x, y, features);
 
     if not id in sm.shared.request_ids:  # only once per round
+        sm.shared.iteration += 1;
         sm.shared.update_dists();
         sm.shared.request_ids.add(id);
     return id;

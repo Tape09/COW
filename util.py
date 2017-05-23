@@ -61,6 +61,59 @@ def calc_path(posA, posB, limit=0):  # from A to B
 
     return out, np.inf;
 
+def calc_path_to(posA, posB, limit=0):  # from A to B
+    import sharedMemory as sm
+
+    # A star search to find path from A to B
+    # return list of positions. excluding posA, includeing posB.
+    # global shared;
+
+    out = [];
+
+    visited = set();
+    q = PriorityQueue();
+    dist = grid_dist(posA, posB);
+    counter = 0;
+    q.put((dist, counter, Node(posA)));
+    counter += 1;
+    visited.add(posA);
+
+    while not q.empty():
+        N = q.get()[2];
+        if (N.pos == posB):
+            temp = N;
+            while temp.prev != None:
+                out.append(temp.pos);
+                temp = temp.prev;
+
+            out.reverse();
+            return out, len(out);
+
+        neighbors = get_neighbors(N.pos);
+        for neighbor in neighbors:
+            if (neighbor in visited):
+                continue;
+            if(neighbor == posB):
+                temp = Node(neighbor,N);
+                while temp.prev != None:
+                    out.append(temp.pos);
+                    temp = temp.prev;
+
+                out.reverse();
+                return out, len(out);
+                
+            if (sm.shared.free_at(neighbor)):
+                # if(free_at_fake(neighbor)):
+                dist = grid_dist(neighbor, posB);
+                if (limit > 0):
+                    if (dist > limit):
+                        continue;
+                q.put((dist, counter, Node(neighbor, N)));
+                counter += 1;
+                visited.add(neighbor);
+
+    return out, np.inf;
+    
 
 def free_at_fake(pos):
     width = 7;
