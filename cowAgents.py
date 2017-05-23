@@ -148,11 +148,10 @@ def following_me(agent_index): # return a list of agents that are following me
             continue;
         
         if(sm.objectives[i].type == "follow"):
-            if(sm.objectives[i].other_agent_index == agent_idx):
+            if(sm.objectives[i].other_agent_index == agent_index):
                 followers.append(i);
             
     return followers;
-            
             
             
             
