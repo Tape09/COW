@@ -6,17 +6,22 @@ class Objective:
 
 
 class ObjectiveExplore(Objective):
-    def __init__(self, agent_index, posA, posB, moves=None):
+    def __init__(self, agent_index):
         self.agent_index = agent_index;
-        if (moves == None):
-            self.moves = calc_path(posA, posB);
+        my_pos = sm.shared.agents[self.agent_index];
+        self.moves, dist = sm.shared.find_nearest(my_pos, "explored", True, 50);
+        
+        if (len(self.moves) == 0):
+            self.goal = None;
         else:
-            self.moves = moves;
-        self.goal = posB;
+            self.goal = self.moves[-1];
         self.index = 0;
         self.type = "explore";
 
     def next_move(self):
+        if (len(self.moves) == 0):
+            return None;
+    
         # global sm.shared
         my_pos = sm.shared.agents[self.agent_index];
         if (my_pos == self.moves[self.index - 1]):
@@ -37,6 +42,8 @@ class ObjectiveExplore(Objective):
 
     def complete(self):
         # global sm.shared;
+        if(len(self.moves) == 0):  
+            return True;
 
         if (self.index >= len(self.moves)):
             return True;
@@ -45,23 +52,33 @@ class ObjectiveExplore(Objective):
 
 
 class ObjectiveMove(Objective):
-    def __init__(self, agent_index, posA, posB, moves=None):
+    def __init__(self, agent_index, posB, moves=None):
         self.agent_index = agent_index;
+        my_pos = sm.shared.agents[self.agent_index];
         if (moves == None):
-            self.moves = calc_path(posA, posB);
+            self.moves,d = calc_path(my_pos, posB);
         else:
             self.moves = moves;
-        self.goal = self.moves[-1];
+            
+        if (len(self.moves) == 0):
+            self.goal = None;
+        else:
+            self.goal = self.moves[-1];  
+            
         self.index = 0;
         self.type = "move";
 
     def next_move(self):
-        # global sm.shared
+        if (len(self.moves) == 0):
+            return None;
+        if(self.goal == None):
+            return None;
         if (self.index >= len(self.moves)):
             return None;
         my_pos = sm.shared.agents[self.agent_index];
-        if (my_pos == self.moves[self.index - 1]):
-            self.index -= 1;
+        if(self.index >= 1):
+            if (my_pos == self.moves[self.index - 1]):
+                self.index -= 1;
         pos = self.moves[self.index];
         move = (pos[0] - my_pos[0], pos[1] - my_pos[1]);
         if sm.shared.free_at(pos) and valid_move(move):  # if next move is free and valid
@@ -77,16 +94,23 @@ class ObjectiveMove(Objective):
 
     def complete(self):
         return (self.index >= len(self.moves));
+       
 
 
 class ObjectiveButton(Objective):
-    def __init__(self, agent_index, posA, posB, button, moves=None):
+    def __init__(self, agent_index, posB, button, moves=None):
         self.agent_index = agent_index;
+        my_pos = sm.shared.agents[self.agent_index];
         if (moves == None):
-            self.moves = calc_path(posA, posB);
+            self.moves = calc_path(my_pos, posB);
         else:
             self.moves = moves;
-        self.goal = self.moves[-1];
+            
+        if (len(self.moves) == 0):
+            self.goal = None;
+        else:
+            self.goal = self.moves[-1];
+            
         self.index = 0;
         self.button = button;
         self.type = "button";
@@ -104,7 +128,6 @@ class ObjectiveButton(Objective):
         move = (pos[0] - my_pos[0], pos[1] - my_pos[1]);
         if sm.shared.free_at(pos) and valid_move(move):  # if next move is free and valid
             self.index += 1;
-            print(self.moves);
             return move;
         else:  # if not free/valid. calc new path
             self.moves, dist = calc_path(my_pos, self.goal);
@@ -159,8 +182,60 @@ class ObjectiveFollow(Objective):
             return move;
         else:  # if not free/valid. something is seriously wrong
             return None
-
+            
 
     def complete(self):
         return False;
+        
+        
+class ObjectiveHerd(Objective): #dummy for now
+    def __init__(self, agent_index, herd_id):
+        self.agent_index = agent_index;
+        self.herd = herd_id;
+        self.type = "herd";
+
+    def next_move(self):
+        return(0,0)
+
+    def complete(self):
+        return False;    
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         

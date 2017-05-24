@@ -17,7 +17,7 @@ def point_in_zone(pos, zone):
     return pos[0] >= zone[0] and pos[0] <= zone[1] and pos[1] >= zone[2] and pos[1] <= zone[3];
 
 
-def calc_path(posA, posB, limit=0):  # from A to B
+def calc_path(posA, posB, limit=0, static = False):  # from A to B
     import sharedMemory as sm
 
     # A star search to find path from A to B
@@ -49,7 +49,7 @@ def calc_path(posA, posB, limit=0):  # from A to B
         for neighbor in neighbors:
             if (neighbor in visited):
                 continue;
-            if (sm.shared.free_at(neighbor)):
+            if (sm.shared.free_at(neighbor, static = static)):
                 # if(free_at_fake(neighbor)):
                 dist = grid_dist(neighbor, posB);
                 if (limit > 0):
@@ -61,7 +61,7 @@ def calc_path(posA, posB, limit=0):  # from A to B
 
     return out, np.inf;
 
-def calc_path_to(posA, posB, limit=0):  # from A to B
+def calc_path_to(posA, posB, limit=0, static = False):  # from A to B
     import sharedMemory as sm
 
     # A star search to find path from A to B
@@ -102,7 +102,7 @@ def calc_path_to(posA, posB, limit=0):  # from A to B
                 out.reverse();
                 return out, len(out);
                 
-            if (sm.shared.free_at(neighbor)):
+            if (sm.shared.free_at(neighbor,static = static)):
                 # if(free_at_fake(neighbor)):
                 dist = grid_dist(neighbor, posB);
                 if (limit > 0):
@@ -159,3 +159,33 @@ def end_game():
 def grid_dist(posA, posB):
     return max(abs(posA[0] - posB[0]), abs(posA[1] - posB[1]));
 
+def mean_pos(positions):
+    x = 0;
+    y = 0;
+    for pos in positions:
+        x += pos[0];
+        y += pos[1];
+        
+    x = int(x / len(positions));
+    y = int(y / len(positions));
+    
+    return (x,y);
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
