@@ -121,6 +121,11 @@ def before_each_round():
                     smallest_team_idx = j;
             agent = jobless_agents.pop();
             sm.shared.herd_teams[smallest_team_idx].add_agent(agent);
+            print("======")
+            print(smallest_team_idx);
+            print(len(sm.shared.herd_teams[0].agents))
+            print(len(sm.shared.herd_teams[1].agents))
+            print("======")
     
     print(len(sm.shared.herd_teams))
     print(len(sm.shared.herd_teams[0].agents))

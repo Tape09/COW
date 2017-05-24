@@ -6,9 +6,16 @@ import random
 
 
 class HerdTeam:
-    def __init__(self, agents = [], cows = []):
-        self.agents = agents;
-        self.cows = cows;
+    def __init__(self, agents = None, cows = None):
+        if agents:
+            self.agents = agents;
+        else:
+            self.agents = [];
+            
+        if cows:
+            self.cows = cows;
+        else:
+            self.cows = [];
         
     def has_agent(self, id):
         return id in self.agents;
