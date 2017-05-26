@@ -1,5 +1,6 @@
 from queue import Queue, PriorityQueue
 import numpy as np
+import random
 
 class Node:
     def __init__(self, pos, prev=None):
@@ -11,13 +12,17 @@ def valid_move(move):
     return (move[0] in [-1, 0, 1]) and (move[1] in [-1, 0, 1]);
 
 
+def make_zone(pos, radius):
+    zone = [pos[0] - radius, pos[0] + radius, pos[1] - radius, pos[1] + radius];
+    return zone;
+    
 def point_in_zone(pos, zone):
     # checks if pos is inside zone (inclusive)
     # zone is a rectangle defined as (x0,x1,y0,y1);
     return pos[0] >= zone[0] and pos[0] <= zone[1] and pos[1] >= zone[2] and pos[1] <= zone[3];
 
 
-def calc_path(posA, posB, limit=0, static = False):  # from A to B
+def calc_path(posA, posB, limit=0, static = False, extra_block = None):  # from A to B
     import sharedMemory as sm
 
     # A star search to find path from A to B
@@ -46,10 +51,21 @@ def calc_path(posA, posB, limit=0, static = False):  # from A to B
             return out, len(out);
 
         neighbors = get_neighbors(N.pos);
+        random.shuffle(neighbors)
         for neighbor in neighbors:
             if (neighbor in visited):
                 continue;
-            if (sm.shared.free_at(neighbor, static = static)):
+            free = sm.shared.free_at(neighbor, static = static);
+            for i in range(len(sm.shared.herd_teams)):
+                if sm.shared.herd_teams[i].blocking(neighbor):
+                    free = False;
+                    break;
+            if(extra_block):
+                for p in extra_block:
+                    if neighbor == p:
+                        free = False;
+                        break;
+            if (free):
                 # if(free_at_fake(neighbor)):
                 dist = grid_dist(neighbor, posB);
                 if (limit > 0):
@@ -61,7 +77,7 @@ def calc_path(posA, posB, limit=0, static = False):  # from A to B
 
     return out, np.inf;
 
-def calc_path_to(posA, posB, limit=0, static = False):  # from A to B
+def calc_path_to(posA, posB, limit=0, static = False, extra_block = None):  # from A to B
     import sharedMemory as sm
 
     # A star search to find path from A to B
@@ -90,6 +106,7 @@ def calc_path_to(posA, posB, limit=0, static = False):  # from A to B
             return out, len(out);
 
         neighbors = get_neighbors(N.pos);
+        random.shuffle(neighbors)
         for neighbor in neighbors:
             if (neighbor in visited):
                 continue;
@@ -102,8 +119,17 @@ def calc_path_to(posA, posB, limit=0, static = False):  # from A to B
                 out.reverse();
                 return out, len(out);
                 
-            if (sm.shared.free_at(neighbor,static = static)):
-                # if(free_at_fake(neighbor)):
+            free = sm.shared.free_at(neighbor, static = static);
+            for i in range(len(sm.shared.herd_teams)):
+                if sm.shared.herd_teams[i].blocking(neighbor):
+                    free = False;
+                    break;
+            if(extra_block):
+                for p in extra_block:
+                    if neighbor == p:
+                        free = False;
+                        break;
+            if (free):
                 dist = grid_dist(neighbor, posB);
                 if (limit > 0):
                     if (dist > limit):

@@ -1,9 +1,11 @@
 import numpy as np
-from util import Node,get_neighbors
+from util import Node,get_neighbors,mean_pos,point_in_zone, make_zone
 from queue import Queue, PriorityQueue
+from sortedcontainers import SortedDict;
 from scipy.signal import convolve2d
 import random
 
+shared = None
 
 class HerdTeam:
     def __init__(self, agents = None, cows = None):
@@ -16,12 +18,20 @@ class HerdTeam:
             self.cows = cows;
         else:
             self.cows = [];
+            
+        self.herd_blob = set();
+        self.herd_perimeter = set();
+        self.perimeter_list = [];
+        self.perimeter_dist = [];
+        # self.agent_targets = [];
+        self.herding = False;
+        self.approaching = False;
         
     def has_agent(self, id):
         return id in self.agents;
         
     def has_cow(self, id):
-        return id in cows;
+        return id in self.cows;
         
     def add_agent(self, id):
         self.agents.append(id);
@@ -42,10 +52,21 @@ class HerdTeam:
         
     def n_cows(self):
         return len(self.cows);
+        
+    def blocking(self, pos):
+        return pos in self.herd_blob;
+        
+    def reset_cows(self):
+        self.cows = [];            
+        self.herd_blob = set();
+        self.herd_perimeter = set();
+        self.perimeter_list = [];
+        self.perimeter_dist = [];
+        self.herding = False;
+        self.approaching = False;
     
 
 
-shared = None
 class SharedMemory:  # NEED TO ADD DIST TO CORRAL
     # fullmap 3rd dimension code:
     # 0 : explored
@@ -68,10 +89,9 @@ class SharedMemory:  # NEED TO ADD DIST TO CORRAL
         self.objectives = [None] * n_agents;
         self.cows = dict();
         
-        
         # self.herd_team_size = 10;
         
-        self.herd_teams = [HerdTeam(), HerdTeam()];
+        self.herd_teams = [HerdTeam()];
 
         self.buttons = dict();
 
@@ -80,8 +100,9 @@ class SharedMemory:  # NEED TO ADD DIST TO CORRAL
         
         self.herd_diameter = 7;
         self.herd_radius = self.herd_diameter // 2;
-        self.herd_threshold = 5;
-        self.herds = []; # herd center -> list of cow IDs
+        self.herd_blob_radius = 4;
+        self.herd_size_threshold = 4;
+        self.herds = dict(); # herd center -> list of cow IDs
         
         self.types = dict();
         self.types["explored"] = 0;
@@ -107,7 +128,7 @@ class SharedMemory:  # NEED TO ADD DIST TO CORRAL
         self.move_to_string[(-1, 1)] = "southwest";
         self.move_to_string[(1, -1)] = "northeast";
 
-        self.block = np.array([0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0]);
+        self.block =        np.array([0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0]);
         self.static_block = np.array([0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0]);
 
         self.fullmap = np.zeros((width, height, len(self.types)));
@@ -117,6 +138,7 @@ class SharedMemory:  # NEED TO ADD DIST TO CORRAL
         self.corral_x1 = None;
         self.corral_y0 = None;
         self.corral_y1 = None;
+        self.corral_zone = None;
 
         self.final_score = None;
         self.final_result = None;
@@ -250,7 +272,7 @@ class SharedMemory:  # NEED TO ADD DIST TO CORRAL
                     visited.add(neighbor);
         return out, np.inf;
 
-    def get_blob(self, pos, limit=10, static = True): # returns a set of positions that are distance <= limit from pos.
+    def get_blob(self, pos, limit=10, static = True, unexplored_blocks = True): # returns a set of positions that are distance <= limit from pos.
         visited = set();
         edge_points = set();
         q = Queue();
@@ -274,7 +296,11 @@ class SharedMemory:  # NEED TO ADD DIST TO CORRAL
                 if (neighbor in visited):
                     continue;
                 
-                if (shared.free_at(neighbor,static = static)):
+                free = self.free_at(neighbor,static = static);
+                if(self.feature_at(neighbor,"explored") == 0):
+                    free = False;
+                
+                if (free):
                     q.put((Node(neighbor, N), dist + 1));
                     visited.add(neighbor);
         return visited, edge_points;
@@ -304,6 +330,7 @@ class SharedMemory:  # NEED TO ADD DIST TO CORRAL
         self.corral_x1 = x1;
         self.corral_y0 = y0;
         self.corral_y1 = y1;
+        self.corral_zone = [x0,x1,y0,y1];
         for x in range(x0, x1 + 1):
             for y in range(y0, y1 + 1):
                 self.modmap((x, y), "explored", 1);
@@ -404,23 +431,112 @@ class SharedMemory:  # NEED TO ADD DIST TO CORRAL
                         shared.modmap(pos, "corral_dist", min(dist, old_dist));
 
     def update_herds(self):
-        self.herds = []; # reset herd list
-        cowmap = self.fullmap[:,:,self.types["cow"]]; # cow layer
-        cowmap = cowmap > 0; # 1 is cow 0 is not cow        
-        filter = np.ones((self.herd_diameter,self.herd_diameter));
-        
-        filtered = convolve2d(cowmap,filter,mode = "same", boundary = "fill");
-        filtered = filtered >= self.herd_threshold; # 1 is center of herd that is larger than herd threshold
-        
-        for x in range(filtered.shape[0]):
-            for y in range(filtered.shape[1]):
-                if(filtered[x,y]): # if herd here
-                    zone = [x - self.herd_radius, x + self.herd_radius, y - self.herd_radius, y + self.herd_radius];
-                    zone_cows = self.cows_in_zone(zone);
+        # for each teams herd. Recalculates cows that may have left or joined the herd
+        for i in range(len(self.herd_teams)):
+            if len(self.herd_teams[i].cows) == 0:
+                continue;
+            positions = [self.cows[cow] for cow in self.herd_teams[i].cows];
+            mpos = mean_pos(positions);
+            zone = make_zone(mpos,4);
+            zone_cows = self.cows_in_zone(zone);
+            self.herd_teams[i].cows = [];
+            for c in zone_cows:
+                add_cow = True;
+                for j in range(len(self.herd_teams)):
+                    if i==j:
+                        continue;
+                    if self.herd_teams[j].has_cow(c):
+                        add_cow = False;
+                        break;
+                if point_in_zone(self.cows[c],self.corral_zone):
+                    add_cow = False;
+                        
+                if add_cow:
+                    self.herd_teams[i].cows.append(c);
                     
-                    self.herds.append( zone_cows);
+        # calc herd blob
+        for i in range(len(self.herd_teams)):
+            if len(self.herd_teams[i].cows) == 0:
+                continue;
+            self.herd_teams[i].herd_blob = set();
+            for c in self.herd_teams[i].cows:
+                blob, _  =  self.get_blob(self.cows[c],self.herd_blob_radius);
+                self.herd_teams[i].herd_blob = self.herd_teams[i].herd_blob | blob;
+                
+            # Calc blob perimeter
+            cowmap = np.zeros((self.width,self.height));
+            for p in self.herd_teams[i].herd_blob:
+                cowmap[p] = 1;
+                
+            filter = np.ones((3,3));
+            filter[0,0] = 0;
+            filter[0,2] = 0;
+            filter[2,0] = 0;
+            filter[2,2] = 0;
+            filter[1,1] = 10;
+            filtered = convolve2d(cowmap,filter,mode = "same", boundary = "fill");
+            filtered[filtered < 10] = 0;
+            filtered[filtered == 14] = 0;
+            filtered[filtered > 0] = 1;
+            
+            self.herd_teams[i].blob_perimeter = set();
+            for x in range(filtered.shape[0]):
+                for y in range(filtered.shape[1]):
+                    if filtered[x,y] == 1:
+                        self.herd_teams[i].blob_perimeter.add((x,y));
+                        
+            # remove perimeter from blob
+            self.herd_teams[i].herd_blob = self.herd_teams[i].herd_blob - self.herd_teams[i].blob_perimeter;
+            
+            # median filter perimeter;            
+            dists = [self.feature_at(p,"corral_dist") for p in self.herd_teams[i].blob_perimeter];
+            median_dist = np.median(dists);
+            temp = self.herd_teams[i].blob_perimeter.copy();
+            for p in temp:
+                if self.feature_at(p,"corral_dist") < median_dist:
+                    self.herd_teams[i].blob_perimeter.remove(p);
+                    
+            self.herd_teams[i].perimeter_list = np.array(list(self.herd_teams[i].blob_perimeter));
+            self.herd_teams[i].perimeter_dist = np.array([self.feature_at(p,"corral_dist") for p in self.herd_teams[i].perimeter_list]);
+            inds = np.array(self.herd_teams[i].perimeter_dist).argsort();
+            self.herd_teams[i].perimeter_list = self.herd_teams[i].perimeter_list[inds];
+            self.herd_teams[i].perimeter_dist = self.herd_teams[i].perimeter_dist[inds];
+            self.herd_teams[i].perimeter_list = [tuple(z) for z in self.herd_teams[i].perimeter_list];
+            # self.herd_teams[i].perimeter_dist = [tuple(z) for z in self.herd_teams[i].perimeter_dist];
+            
+            
+    def get_n_herds(self,n):
+        herds = [];
+        filter = np.ones((self.herd_diameter,self.herd_diameter));
+        # n = len(self.herd_teams);    
+        cowmap = self.fullmap[:,:,self.types["cow"]].copy(); # cow layer   
+        cowmap = cowmap > 0; # 1 is cow 0 is not cow           
+        # remove cows being herded
+        for i in range(len(self.herd_teams)):
+            for cow in self.herd_teams[i].cows:
+                pos = self.cows[cow];
+                cowmap[pos] = 0;
+                
+        # remove cows in corral
+        for x in range(self.corral_x0,self.corral_x1+1):
+            for y in range(self.corral_y0,self.corral_y1+1):
+                cowmap[x,y] = 0;
+            
         
-        
+        for i in range(n):                
+            filtered = convolve2d(cowmap,filter,mode = "same", boundary = "fill");
+            x,y = np.unravel_index(filtered.argmax(), filtered.shape);
+            zone = [x - self.herd_radius, x + self.herd_radius, y - self.herd_radius, y + self.herd_radius];
+            zone_cows = self.cows_in_zone(zone);
+            herds.append(zone_cows);
+            for xx in range(x - self.herd_radius, x + self.herd_radius + 1):
+                for yy in range(y - self.herd_radius, y + self.herd_radius + 1):
+                    if not self.inside_map((xx,yy)):
+                        continue;
+                    cowmap[xx,yy] = 0;
+            # cowmap[x - self.herd_radius : x + self.herd_radius + 1, y - self.herd_radius : y + self.herd_radius + 1] = np.zeros((self.herd_diameter,self.herd_diameter));
+    
+        return herds;
         
     def cows_in_zone(self,zone):
         out = [];

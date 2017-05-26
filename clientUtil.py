@@ -178,8 +178,7 @@ def handle_ra(root, agent_index):  # HANDLE DISTANCE TO CORRAL CALCULATIONS HERE
 
         sm.shared.setmap(x, y, features);
 
-    if not id in sm.shared.request_ids:  # only once per round
-        before_each_round();        
+    if not id in sm.shared.request_ids:  # only once per round               
         sm.shared.iteration += 1;        
         sm.shared.request_ids.add(id);
     return id;
@@ -203,6 +202,7 @@ def main():
         sockets[-1].send(create_auth_message(usernames[-1], password));
         print("Connecting ", usernames[-1])
 
+    counter = dict();
     while True:
         readable, writable, exceptional = select.select(sockets, sockets, []);
         time.sleep(0.01);
@@ -212,14 +212,46 @@ def main():
                 # print(data);
                 agent_index = sockets.index(s);
                 print("RECEIVED MESSAGE FOR AGENT", agent_index);
-                response = handle_raw_message(data, agent_index);
-                if (response):
-                    if (response == "end"):
-                        end_game();
-                        return;
+                # response = handle_raw_message(data, agent_index);
+                ###
+                time.sleep(0.005);
+                root = etree.fromstring(data);
+                # response = None;
+                # determine message type
+                if (root.attrib["type"] == "request-action"):
+                    id = handle_ra(root, agent_index);
+                    print("HANDLING REQUEST", id);
+                    
+                    if(id in counter):
+                        counter[id] += 1;
                     else:
-                        s.send(response);
-                        print("RESPONSE SENT")
+                        counter[id] = 1;
+                        
+                    if(counter[id] == 20):
+                        before_each_round(); 
+                        for i in range(20):
+                            move = make_decision(i);
+                            string_move = sm.shared.move_to_string[move];
+                            response = create_action_message(string_move, id);
+                            sockets[i].send(response);
+                            # print(response)
+                            print("RESPONSE SENT")
+                # print(data);
+                # print(response)
+                # print();
+                elif (root.attrib["type"] == "sim-start"):
+                    handle_simstart(root);
+                elif (root.attrib["type"] == "auth-response"):
+                    print("Authenticated!")
+                elif (root.attrib["type"] == "sim-end"):
+                    handle_simend(root);
+                    response = "end";
+                else:
+                    # nothing?
+                    print(data)
+                    print("ERROR: bad message")
+                ###
+                
 
 if __name__ == '__main__':
     main()

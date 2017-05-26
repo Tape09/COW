@@ -52,11 +52,13 @@ class ObjectiveExplore(Objective):
 
 
 class ObjectiveMove(Objective):
-    def __init__(self, agent_index, posB, moves=None):
+    def __init__(self, agent_index, posB, moves=None, static = False):
         self.agent_index = agent_index;
         my_pos = sm.shared.agents[self.agent_index];
+        self.static = static;
+        
         if (moves == None):
-            self.moves,d = calc_path(my_pos, posB);
+            self.moves,d = calc_path(my_pos, posB, static = self.static);
         else:
             self.moves = moves;
             
@@ -67,6 +69,7 @@ class ObjectiveMove(Objective):
             
         self.index = 0;
         self.type = "move";
+        self.failcount = 0;
 
     def next_move(self):
         if (len(self.moves) == 0):
@@ -85,8 +88,12 @@ class ObjectiveMove(Objective):
             self.index += 1;
             return move;
         else:  # if not free/valid. calc new path
-            self.moves, dist = calc_path(my_pos, self.goal);
-            if (len(self.moves) == 0):
+            self.failcount += 1;
+            if self.static:
+                self.moves, dist = calc_path(my_pos, self.goal, static = self.static, extra_block = [pos], limit = 30);
+            else:
+                self.moves, dist = calc_path(my_pos, self.goal, static = self.static, limit = 30);
+            if (len(self.moves) == 0 or self.failcount > 2):
                 return None;  # no path exists
 
             self.index = 0;
@@ -96,7 +103,61 @@ class ObjectiveMove(Objective):
         return (self.index >= len(self.moves));
        
 
+class ObjectiveMoveLazy(Objective):
+    def __init__(self, agent_index, posB, moves=None, static = False, lazyness = 2):
+        self.agent_index = agent_index;
+        self.lazyness = lazyness;
+        my_pos = sm.shared.agents[self.agent_index];
+        self.static = static;
+        
+        if (moves == None):
+            self.moves,d = calc_path(my_pos, posB, static = self.static);
+        else:
+            self.moves = moves;
+            
+        if (len(self.moves) == 0):
+            self.goal = None;
+        else:
+            self.goal = self.moves[-1];  
+            
+        self.index = 0;
+        self.type = "move_lazy";
+        self.failcount = 0;
 
+    def next_move(self):
+        if (len(self.moves) == 0):
+            return None;
+        if(self.goal == None):
+            return None;
+        if (self.index >= len(self.moves)):
+            return None;
+        my_pos = sm.shared.agents[self.agent_index];
+        if(self.index >= 1):
+            if (my_pos == self.moves[self.index - 1]):
+                self.index -= 1;
+        pos = self.moves[self.index];
+        move = (pos[0] - my_pos[0], pos[1] - my_pos[1]);
+        if sm.shared.free_at(pos) and valid_move(move):  # if next move is free and valid
+            self.index += 1;
+            return move;
+        else:  # if not free/valid. calc new path
+            self.failcount += 1;
+            if self.static:
+                self.moves, dist = calc_path(my_pos, self.goal, static = self.static, extra_block = [pos]);
+            else:
+                self.moves, dist = calc_path(my_pos, self.goal, static = self.static);
+            if (len(self.moves) == 0 or self.failcount > 2):
+                return None;  # no path exists
+
+            self.index = 0;
+            return self.next_move();
+
+    def complete(self):
+        if(len(self.moves) - self.index <= self.lazyness):
+            return True;
+        return (self.index >= len(self.moves));
+        
+        
 class ObjectiveButton(Objective):
     def __init__(self, agent_index, posB, button, moves=None):
         self.agent_index = agent_index;
@@ -171,7 +232,7 @@ class ObjectiveFollow(Objective):
         if(dist > 99999):
             return None;
             
-        if(len(path) <= 2):
+        if(len(path) <= 1):
             return (0,0);
             
             
@@ -203,9 +264,15 @@ class ObjectiveHerd(Objective): #dummy for now
         
         
         
+class ObjectiveStandStill(Objective):
+    def __init__(self):
+        self.type = "still"
+
+    def next_move(self):
+        return (0,0);
         
-        
-        
+    def complete(self):
+        return False;     
         
         
         

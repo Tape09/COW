@@ -7,9 +7,9 @@ import random
 sm.shared = None;
 
 
-def before_each_round():
-    sm.shared.update_herds();
+def before_each_round():    
     sm.shared.update_dists();
+    sm.shared.update_herds();
     print("ITERATION: ",sm.shared.iteration)
     
     # assign button bitch
@@ -93,7 +93,7 @@ def before_each_round():
     
     ###################################
     # after initial exploration: team up!
-    if(sm.shared.iteration > 2):
+    if(sm.shared.iteration > 20):
         jobless_agents = [];
         
         for i, pos in enumerate(sm.shared.agents): # agent is jobless if its not part of a team, not pushing a button, not moving, or has no objective
@@ -121,23 +121,176 @@ def before_each_round():
                     smallest_team_idx = j;
             agent = jobless_agents.pop();
             sm.shared.herd_teams[smallest_team_idx].add_agent(agent);
-            print("======")
-            print(smallest_team_idx);
-            print(len(sm.shared.herd_teams[0].agents))
-            print(len(sm.shared.herd_teams[1].agents))
-            print("======")
+
+    ##################################### 
+    for i in range(len(sm.shared.herd_teams)):
+        if sm.shared.herd_teams[i].herding or sm.shared.herd_teams[i].approaching:
+            if(sm.shared.herd_teams[i].n_cows() < sm.shared.herd_size_threshold):
+                sm.shared.herd_teams[i].reset_cows();
     
-    print(len(sm.shared.herd_teams))
-    print(len(sm.shared.herd_teams[0].agents))
-    print(len(sm.shared.herd_teams[1].agents))
-    ##################################### THIS WILL CHANGE
+    
+    fail = False;
+    if(sm.shared.iteration > 50):
+        # if team is not herding, find a herd and set the objective
+        for i in range(len(sm.shared.herd_teams)):
+            if not sm.shared.herd_teams[i].herding and not sm.shared.herd_teams[i].approaching:
+                # find a herd
+                herd = sm.shared.get_n_herds(1)[0];
+                if len(herd) == 0:
+                    fail = True;
+                    break;
+                    
+                sm.shared.herd_teams[i].cows = herd;
+                sm.shared.herd_teams[i].approaching = True;
+                
+                
+        sm.shared.update_herds();
+        
+        # if approaching, find behind position and set leader to go there
+        for i in range(len(sm.shared.herd_teams)):
+            if sm.shared.herd_teams[i].approaching:
+                # if finished approaching 
+                leader = sm.shared.herd_teams[i].agents[0];
+                if(sm.shared.objectives[leader] != None):
+                    if(sm.shared.objectives[leader].type == "move_lazy"):
+                        if(sm.shared.objectives[leader].complete()):
+                            # finished moving to target
+                            sm.shared.herd_teams[i].approaching = False;
+                            sm.shared.herd_teams[i].herding = True;
+                            continue;
+                            
+                # if not finished, set target and objective
+                found_target = False;
+                for p in reversed(sm.shared.herd_teams[i].perimeter_list):
+                    if(sm.shared.free_at(p,True)):
+                        found_target = True;
+                        target_position = p;
+                        break;
+        
+                if not found_target:
+                    sm.shared.herd_teams[i].reset_cows();
+                    fail = True;
+                    continue;
+                    
+                
+                sm.shared.objectives[leader] = ObjectiveMoveLazy(leader,target_position);
+                # check again if finished
+                if(sm.shared.objectives[leader].complete()):
+                    sm.shared.herd_teams[i].approaching = False;
+                    sm.shared.herd_teams[i].herding = True;
+                    continue;
+        
+        
+
     # Team objectives
-    for j in range(len(sm.shared.herd_teams)):
-        for i,agent in enumerate(sm.shared.herd_teams[j].agents):
-            # skip leader for now
-            if(i == 0):
-                continue;
-            sm.shared.objectives[agent] = ObjectiveFollow(agent,sm.shared.herd_teams[j].agents[i-1]);
+    for i in range(len(sm.shared.herd_teams)):
+        if sm.shared.herd_teams[i].n_agents() <= 1:
+            continue;
+        leader = sm.shared.herd_teams[i].agents[0];
+        # if team is not approaching and not herding, set leader to explore, and rest to follow
+        if not sm.shared.herd_teams[i].herding and not sm.shared.herd_teams[i].approaching:
+            sm.shared.herd_teams[i].reset_cows();
+            sm.shared.objectives[leader] = ObjectiveExplore(leader);
+            for j,agent in enumerate(sm.shared.herd_teams[i].agents):
+                # skip leader
+                if(j == 0):
+                    continue;
+                sm.shared.objectives[agent] = ObjectiveFollow(agent,sm.shared.herd_teams[i].agents[j-1]);
+          
+        # if team is approaching, set followers to follow
+        if sm.shared.herd_teams[i].approaching:
+            for j,agent in enumerate(sm.shared.herd_teams[i].agents):
+                # skip leader
+                if(j == 0):
+                    continue;
+                sm.shared.objectives[agent] = ObjectiveFollow(agent,sm.shared.herd_teams[i].agents[j-1]);        
+        
+        # if team is herding, set all agents to go to designated spots along perimeter
+        if sm.shared.herd_teams[i].herding:
+            perimeter = sm.shared.herd_teams[i].perimeter_list.copy();
+            random.shuffle(perimeter);
+            
+            if len(perimeter) > sm.shared.herd_teams[i].n_agents():
+                n = sm.shared.herd_teams[i].n_agents();
+            else:
+                n = len(perimeter);
+                
+            target_points = [perimeter[z] for z in range(n)];
+            # calculate all dists to agents
+            # assign minimum max dist
+            dist_map = [[0 for x in range(sm.shared.herd_teams[i].n_agents())] for y in range(n)];
+            # path_map = [[0 for x in range(sm.shared.herd_teams[i].n_agents())] for y in range(n)];
+            
+            for target in range(n):
+                for ag in range(sm.shared.herd_teams[i].n_agents()):
+                    agent = sm.shared.herd_teams[i].agents[ag];
+                    agent_pos = sm.shared.agents[agent];
+                    # path,dist = calc_path(agent_pos,target_points[target],static = True);
+                    dist = grid_dist(agent_pos,target_points[target]);
+                    dist_map[target][ag] = dist;
+                    # path_map[target][ag] = path;
+                        
+            assigned_ag = [];
+            assigned_target = [];
+            for u in range(n):            
+                minvals = [];
+                for t in range(n):
+                    if(t in assigned_target):
+                        minvals.append(-1);
+                        continue;
+                        
+                    minval = np.inf;
+                    for a in range(len(dist_map[t])):
+                        if a in assigned_ag:
+                            continue;
+                        if(dist_map[t][a] < minval):
+                            minval = dist_map[t][a];
+                    
+                    
+                    if(minval == np.inf):
+                        minvals.append(-1);
+                    else:
+                        minvals.append(minval);
+                    
+                maxval = -1;
+                for t in range(n):
+                    if(minvals[t] > maxval):
+                        maxval = minvals[t];
+                        best_t = t;
+                        
+                if(maxval >= 0 and not maxval == np.inf):
+                    # best_a = np.argmin(dist_map[best_t]);
+                    minval = np.inf;
+                    for a in range(len(dist_map[t])):
+                        if a in assigned_ag:
+                            continue;
+                        if(dist_map[t][a] < minval):
+                            minval = dist_map[t][a];
+                            best_a = a;
+                    
+                    assigned_target.append(best_t);
+                    assigned_ag.append(best_a);
+                
+            for j in range(len(assigned_ag)):
+                ag = assigned_ag[j];
+                agent = sm.shared.herd_teams[i].agents[ag];
+                agent_pos = sm.shared.agents[agent];
+                t = assigned_target[j];
+                target = target_points[t];
+                
+                path,dist = calc_path(agent_pos,target,static = True);
+                sm.shared.objectives[agent] = ObjectiveMove(agent,target,path);
+        
+            assigned_agents = [sm.shared.herd_teams[i].agents[j] for j in assigned_ag];
+            for agent in sm.shared.herd_teams[i].agents:
+                if (not agent in assigned_agents):
+                    sm.shared.objectives[agent] = ObjectiveStandStill();
+            
+            # print("FREEEZER")
+            # for j,agent in enumerate(sm.shared.herd_teams[i].agents):
+                # sm.shared.objectives[agent] = ObjectiveStandStill();
+    
+        
     
     
 
@@ -249,6 +402,11 @@ def make_decision(agent_index):
     if (my_move == None):
         my_move = random.choice(moves);
         sm.shared.objectives[agent_index] = None;  # should be something smarter
+        
+    # if sm.shared.objectives[agent_index] != None:
+        # print(sm.shared.objectives[agent_index].type)
+        
+    # print (my_move);
     return my_move;
 
 def relink_followers(agent_index):  # makes all agent that are following me, follow who I am following. If not following anyone, set objective to none
